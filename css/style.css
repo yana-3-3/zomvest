@@ -570,41 +570,67 @@ ul {
   display: block;
 }
 
-/* 맵 상의 장소 마커 */
-.map-location {
-  cursor: pointer;
-  transition: all 0.2s;
+/* 장소 노드 (SVG) */
+.loc-node {
+  transition: transform 0.15s ease;
 }
 
-.map-location:hover .map-location-bg {
-  filter: brightness(1.1);
+.loc-node:hover {
+  transform: scale(1.15) translate(0, -2px);
 }
 
-.map-location.active .map-location-bg {
-  stroke: var(--accent-gold);
-  stroke-width: 3;
-}
-
-.map-location-label {
-  font-family: var(--font-serif);
-  font-size: 11px;
-  font-weight: 700;
-  fill: var(--text-primary);
-  pointer-events: none;
+.loc-label text {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .player-marker {
   pointer-events: none;
-  transition: all 0.6s ease;
 }
 
-.player-marker circle {
-  animation: pulse 2s infinite;
+.player-marker circle:first-child {
+  animation: pulse-ring 1.6s ease-in-out infinite;
+  transform-origin: center;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+@keyframes pulse-ring {
+  0%, 100% { opacity: 0.25; r: 16; }
+  50% { opacity: 0.1; r: 22; }
+}
+
+.home-marker {
+  pointer-events: none;
+}
+
+/* 줌 컨트롤 */
+.map-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.map-controls button {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s;
+}
+
+.map-controls button:hover {
+  background: var(--bg-card);
+  color: var(--accent-green-dark);
 }
 
 /* 액션 로그 (맵 하단) */
@@ -819,4 +845,242 @@ ul {
   .panel-left, .panel-right {
     max-height: 200px;
   }
+}
+
+/* ============================================
+   요리 시스템
+   ============================================ */
+
+.recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recipe-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  transition: all 0.15s;
+}
+
+.recipe-card.available {
+  cursor: pointer;
+}
+
+.recipe-card.available:hover {
+  border-color: var(--accent-green);
+  transform: translateX(2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.recipe-card.locked {
+  opacity: 0.5;
+}
+
+.recipe-card.missing {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+.recipe-icon {
+  font-size: 32px;
+  text-align: center;
+  line-height: 1;
+}
+
+.recipe-info h4 {
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.recipe-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recipe-ingredients {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.recipe-ingredients .has { color: var(--accent-green-dark); }
+.recipe-ingredients .lack { color: #8f3a36; font-weight: 600; }
+
+.recipe-action {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.recipe-card.available .recipe-action {
+  background: var(--accent-green);
+  color: white;
+}
+
+/* -------- 요리 미니게임 -------- */
+
+.cook-game {
+  text-align: center;
+}
+
+.cook-stage {
+  margin-bottom: 20px;
+}
+
+.cook-dish-icon {
+  font-size: 64px;
+  margin-bottom: 8px;
+  display: inline-block;
+  animation: cook-sizzle 1.5s ease-in-out infinite;
+}
+
+@keyframes cook-sizzle {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-3px) rotate(2deg); }
+}
+
+.cook-progress {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.cook-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-rust), var(--accent-gold));
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.cook-step-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.cook-step-count {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--accent-green-dark);
+  margin-bottom: 12px;
+}
+
+/* 타이밍 바 */
+.timing-bar {
+  position: relative;
+  height: 44px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 16px 0;
+}
+
+.timing-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(107, 142, 78, 0.25);
+  border-left: 2px dashed var(--accent-green);
+  border-right: 2px dashed var(--accent-green);
+}
+
+.timing-zone.perfect {
+  background: rgba(212, 160, 74, 0.4);
+  border-color: var(--accent-gold);
+}
+
+.timing-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-hp);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(194, 85, 46, 0.6);
+  transition: left 0.02s linear;
+}
+
+.cook-hit-btn {
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.cook-hit-btn:active {
+  transform: scale(0.97);
+}
+
+/* 결과 메시지 */
+.cook-result {
+  margin-top: 10px;
+  min-height: 24px;
+  font-weight: 700;
+  font-size: 14px;
+  animation: result-pop 0.3s ease-out;
+}
+
+@keyframes result-pop {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.cook-result.perfect { color: var(--accent-gold); }
+.cook-result.good { color: var(--accent-green-dark); }
+.cook-result.miss { color: #8f3a36; }
+
+/* 완료 화면 */
+.cook-complete {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.cook-complete-icon {
+  font-size: 80px;
+  margin-bottom: 12px;
+  animation: result-pop 0.4s ease-out;
+}
+
+.cook-complete-quality {
+  font-family: var(--font-display);
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.cook-complete-quality.perfect { color: var(--accent-gold); }
+.cook-complete-quality.good { color: var(--accent-green-dark); }
+.cook-complete-quality.normal { color: var(--text-secondary); }
+.cook-complete-quality.burnt { color: var(--color-hp); }
+
+.cook-complete-desc {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+/* 재료 태그 */
+.ingredient-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  font-size: 11px;
 }

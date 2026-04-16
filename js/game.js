@@ -10,10 +10,11 @@ import {
 
 import {
   SKILLS, MAX_SKILL_LEVEL, xpToNext,
-  ITEMS, LOCATIONS, STATUS_EFFECTS, FORAGE_LOOT, FISHING_POOL, RECIPES
+  ITEMS, LOCATION_TYPES, TRADER_POOL, STATUS_EFFECTS, FORAGE_LOOT, FISHING_POOL, RECIPES
 } from './data.js';
 
-import { renderMap, setPlayerMarkerTo } from './map.js';
+import { initMap, setPlayerPos, setHomePos, findNearbyLocation, getLocationById, centerOnPlayer, zoomBy } from './map.js';
+import { initCooking, openCookingMenu } from './cooking.js';
 
 // -------- 전역 게임 상태 --------
 const state = {
@@ -97,12 +98,43 @@ async function loadPlayer() {
 }
 
 function initUI() {
-  renderMap(els.mapWrapper, LOCATIONS, state.player.location, (locId) => {
-    travelTo(locId);
+  // 기존 데이터에 worldX/Y가 없는 경우 마이그레이션
+  if (state.player.worldX == null || state.player.worldY == null) {
+    state.player.worldX = 1200;
+    state.player.worldY = 900;
+    state.player.locationId = null;
+  }
+  // 구버전 location 필드 제거
+  if ('location' in state.player) {
+    delete state.player.location;
+  }
+
+  initMap(els.mapWrapper, {
+    initialX: state.player.worldX,
+    initialY: state.player.worldY,
+    homeX: state.player.homeX,
+    homeY: state.player.homeY,
+    onLocationClick: handleLocationClick,
+    onEmptyClick: handleEmptyClick
   });
 
   els.playerName.textContent = state.player.nickname || '생존자';
   renderAll();
+
+  // 모듈 초기화
+  initCooking({
+    getPlayer: () => state.player,
+    addItem,
+    removeItem,
+    addSkillXp,
+    addStatusEffect,
+    log,
+    toast,
+    openModal,
+    closeModal,
+    queueSave,
+    renderAll
+  });
 
   // 이벤트 바인딩
   els.logoutBtn.addEventListener('click', async () => {
@@ -124,7 +156,20 @@ function initUI() {
   actionButtons.trade.addEventListener('click',  () => tryAction('trade'));
   actionButtons.rest.addEventListener('click',   () => tryAction('rest'));
 
+  // 맵 줌 컨트롤
+  document.getElementById('map-zoom-in').addEventListener('click', () => zoomBy(1.25));
+  document.getElementById('map-zoom-out').addEventListener('click', () => zoomBy(0.8));
+  document.getElementById('map-center').addEventListener('click', () => centerOnPlayer());
+
   updateActionAvailability();
+
+  // 처음 접속 시 안내
+  if (state.player.homeX == null) {
+    log('아직 정착할 곳이 없다. 맵을 둘러보다가 마음에 드는 빈 땅을 클릭해 거점을 세우자.', 'event');
+    setTimeout(() => toast('빈 땅을 클릭해 거점을 세워보세요', 'info'), 800);
+  } else {
+    log(`${state.player.nickname}, 다시 돌아왔다. 살아있다는 것만으로도 다행이다.`, 'system');
+  }
 }
 
 // ============================================
@@ -136,8 +181,19 @@ function renderAll() {
   renderSkills();
   renderBuffs();
   renderInventory();
-  els.currentLocation.textContent = '📍 ' + (LOCATIONS[state.player.location]?.name || '???');
-  setPlayerMarkerTo(state.player.location);
+
+  // 현재 위치 라벨
+  let locLabel = '황야';
+  if (state.player.locationId) {
+    if (state.player.locationId === 'home') {
+      locLabel = '내 거점';
+    } else {
+      const loc = getLocationById(state.player.locationId);
+      if (loc) locLabel = loc.name;
+    }
+  }
+  els.currentLocation.textContent = '📍 ' + locLabel;
+
   updateActionAvailability();
 }
 
@@ -234,9 +290,16 @@ function renderInventory() {
 }
 
 function updateActionAvailability() {
-  const loc = LOCATIONS[state.player.location];
-  if (!loc) return;
-  const available = loc.actions || [];
+  let available = [];
+  if (state.player.locationId === 'home') {
+    // 거점에서는 농사/요리/휴식
+    available = ['farm', 'cook', 'rest'];
+  } else if (state.player.locationId) {
+    const loc = getLocationById(state.player.locationId);
+    if (loc) available = loc.actions || [];
+  }
+  // 휴식은 어디서나 가능 (단, 효과는 다름)
+  if (!available.includes('rest')) available = [...available, 'rest'];
 
   actionButtons.fish.disabled   = !available.includes('fish');
   actionButtons.farm.disabled   = !available.includes('farm');
@@ -294,15 +357,18 @@ function doFish() {
 
 // ===== 탐색(포라징) =====
 function doForage() {
-  const locId = state.player.location;
-  const table = FORAGE_LOOT[locId];
+  const locId = state.player.locationId;
+  if (!locId || locId === 'home') { log('여기는 탐색할 곳이 아니다.', 'system'); return; }
+  const loc = getLocationById(locId);
+  if (!loc) { log('알 수 없는 장소.', 'system'); return; }
+  const table = FORAGE_LOOT[loc.type];
   if (!table) { log('여기는 탐색할 수 없다.', 'system'); return; }
 
   const level = state.player.skills.foraging.level;
   const gained = [];
   for (const row of table) {
     if (row.minSkill && row.minSkill > level) continue;
-    // 탐색 레벨이 높을수록 확률 증가 (10% 스케일)
+    // 탐색 레벨이 높을수록 확률 증가
     const bonus = 1 + (level - 1) * 0.05;
     if (Math.random() < Math.min(0.9, row.chance * bonus)) {
       const [lo, hi] = row.amount || [1, 1];
@@ -313,9 +379,10 @@ function doForage() {
   }
 
   // 파밍 중 적 조우 확률 (폐허/연구소에서만)
-  const loc = LOCATIONS[locId];
-  if (loc.type === 'ruins' || loc.type === 'lab') {
-    if (Math.random() < 0.3) {
+  const dangerousTypes = ['ruins_mall', 'ruins_city', 'ruins_farm', 'lab'];
+  if (dangerousTypes.includes(loc.type)) {
+    const dangerLevel = loc.danger || 0.25;
+    if (Math.random() < dangerLevel) {
       log('⚠ 근처에서 무언가 움직였다... (전투 시스템은 추후 구현)', 'event');
       // TODO: 전투 트리거
       state.player.hp = Math.max(0, state.player.hp - 5);
@@ -344,17 +411,25 @@ function doFarm() {
   <p style="margin-top:10px;color:var(--text-secondary);font-size:13px;">여기에 씨앗 심기/수확하기 UI가 들어갈 예정입니다.</p>`);
 }
 
-// ===== 요리 (플레이스홀더) =====
+// ===== 요리 =====
 function doCook() {
-  openModal('요리', `<p>요리 시스템은 다음 단계에서 미니게임과 함께 구현됩니다.</p>
-  <p style="margin-top:10px;color:var(--text-secondary);font-size:13px;">현재 가능한 레시피: ${RECIPES.filter(r => r.minSkill <= state.player.skills.cooking.level).length}개</p>`);
+  openCookingMenu();
 }
 
 // ===== 거래 (플레이스홀더) =====
 function doTrade() {
-  const loc = LOCATIONS[state.player.location];
-  openModal(`거래 - ${loc.name}`, `<p>거래 시스템은 다음 단계에서 구현됩니다.</p>
-  <p style="margin-top:10px;color:var(--text-secondary);font-size:13px;">상인: ${loc.trader || '없음'}</p>`);
+  const loc = getLocationById(state.player.locationId);
+  if (!loc || loc.type !== 'village') {
+    log('여기는 거래할 수 있는 곳이 아니다.', 'system');
+    return;
+  }
+  const trader = TRADER_POOL[loc.trader];
+  const traderName = trader ? trader.name : '알 수 없는 상인';
+  openModal(`거래 - ${loc.name}`, `
+    <p style="margin-bottom:10px;">이 마을의 주민들: <strong>${traderName}</strong></p>
+    <p style="color:var(--text-secondary);font-size:13px;">거래 UI는 다음 단계에서 구현됩니다.</p>
+    <p style="color:var(--text-muted);font-size:12px;margin-top:10px;">판매 품목 ${trader?.sells?.length || 0}종 · 매입 품목 ${trader?.buys?.length || 0}종</p>
+  `);
 }
 
 // ===== 휴식 =====
@@ -528,23 +603,32 @@ function cleanupExpiredEffects() {
 }
 
 // ============================================
-// 위치 이동
+// 위치 이동 (월드 좌표 기반)
 // ============================================
 
-function travelTo(locId) {
-  if (!LOCATIONS[locId]) return;
-  if (state.player.location === locId) return;
+// 장소 아이콘 클릭 → 장소로 이동
+function handleLocationClick(loc) {
   if (!state.player.alive) return;
+  const dist = distance(state.player.worldX, state.player.worldY, loc.x, loc.y);
 
-  const loc = LOCATIONS[locId];
-  state.player.location = locId;
-  log(`📍 ${loc.name}(으)로 이동했다.`, 'system');
-  // 이동 시 체력/수분 소모
-  state.player.hunger = Math.max(0, state.player.hunger - 2);
-  state.player.thirst = Math.max(0, state.player.thirst - 3);
+  // 이미 그 장소에 있으면 무시
+  if (state.player.locationId === loc.id) return;
 
-  // 이동 중 감염 확률 (폐허/연구소)
-  if ((loc.type === 'ruins' || loc.type === 'lab') && !hasEffect('immune_boost')) {
+  // 너무 멀면 긴 이동 — 지금은 즉시 이동하되 스태미나 소모 크게
+  const travelCost = Math.min(25, Math.floor(dist / 120));
+
+  state.player.worldX = loc.x;
+  state.player.worldY = loc.y;
+  state.player.locationId = loc.id;
+  state.player.hunger = Math.max(0, state.player.hunger - travelCost * 0.8);
+  state.player.thirst = Math.max(0, state.player.thirst - travelCost);
+
+  setPlayerPos(loc.x, loc.y);
+  centerOnPlayer();
+  log(`📍 ${loc.name}에 도착했다.`, 'system');
+
+  // 이동 중 감염 노출 체크
+  if ((loc.type === 'ruins_mall' || loc.type === 'ruins_city' || loc.type === 'lab') && !hasEffect('immune_boost')) {
     if (Math.random() < 0.05) {
       state.player.infection = Math.min(state.player.maxInfection, state.player.infection + 10);
       addStatusEffect('infected');
@@ -555,6 +639,95 @@ function travelTo(locId) {
 
   queueSave();
   renderAll();
+}
+
+// 맵 빈 곳 클릭 → 그 좌표 근처에 장소가 있으면 이동, 없으면 "이동하기/정착하기" 모달
+function handleEmptyClick(x, y) {
+  if (!state.player.alive) return;
+  // 근처에 장소 있으면 그쪽으로 전환
+  const nearby = findNearbyLocation(x, y, 35);
+  if (nearby) {
+    handleLocationClick(nearby);
+    return;
+  }
+  // 빈 땅 — 이동 / 정착 선택지
+  const dist = distance(state.player.worldX, state.player.worldY, x, y);
+  if (dist < 30) return; // 너무 가까우면 무시
+
+  openModal('빈 땅', `
+    <div style="text-align:center;">
+      <p style="margin-bottom:8px;">이곳은 사람의 손이 닿지 않은 땅이다.</p>
+      <p style="color:var(--text-secondary);font-size:12px;margin-bottom:18px;">
+        현재 위치에서 약 ${Math.floor(dist)}m 거리.
+      </p>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button class="btn btn-primary" id="btn-walkto">이곳으로 이동</button>
+        ${state.player.homeX == null ?
+          `<button class="btn btn-primary" id="btn-settle" style="background:var(--accent-rust);">여기에 정착</button>` :
+          `<button class="btn btn-ghost" id="btn-move-home">거점 옮기기</button>`}
+      </div>
+      ${state.player.homeX != null ? `<p style="margin-top:12px;font-size:11px;color:var(--text-muted);">이미 거점이 있습니다. 옮기면 기존 농장 진행상황이 초기화됩니다.</p>` : ''}
+    </div>
+  `);
+  document.getElementById('btn-walkto').addEventListener('click', () => { closeModal(); walkTo(x, y); });
+  const settleBtn = document.getElementById('btn-settle');
+  if (settleBtn) settleBtn.addEventListener('click', () => { closeModal(); settleHere(x, y); });
+  const moveBtn = document.getElementById('btn-move-home');
+  if (moveBtn) moveBtn.addEventListener('click', () => {
+    closeModal();
+    if (confirm('거점을 이곳으로 옮기시겠습니까? 농장 진행상황은 초기화됩니다.')) {
+      settleHere(x, y);
+    }
+  });
+}
+
+// 지정 좌표로 걸어서 이동 (지금은 즉시, 추후 애니메이션 가능)
+function walkTo(x, y) {
+  const dist = distance(state.player.worldX, state.player.worldY, x, y);
+  const cost = Math.min(20, Math.floor(dist / 120));
+  state.player.worldX = x;
+  state.player.worldY = y;
+  // 빈 곳으로 이동했으면 locationId 해제, 단 거점이면 home
+  if (state.player.homeX != null &&
+      Math.abs(x - state.player.homeX) < 30 &&
+      Math.abs(y - state.player.homeY) < 30) {
+    state.player.locationId = 'home';
+  } else {
+    state.player.locationId = null;
+  }
+  state.player.hunger = Math.max(0, state.player.hunger - cost * 0.7);
+  state.player.thirst = Math.max(0, state.player.thirst - cost);
+  setPlayerPos(x, y);
+  centerOnPlayer();
+  log(`황야를 가로질러 이동했다. (${Math.floor(dist)}m)`, 'system');
+  queueSave();
+  renderAll();
+}
+
+// 이곳에 거점 세우기
+function settleHere(x, y) {
+  // 기존 거점 이동이면 농사 초기화
+  const wasRelocating = state.player.homeX != null;
+  state.player.homeX = x;
+  state.player.homeY = y;
+  if (wasRelocating) state.player.farmPlots = [];
+
+  state.player.worldX = x;
+  state.player.worldY = y;
+  state.player.locationId = 'home';
+
+  setHomePos(x, y);
+  setPlayerPos(x, y);
+  centerOnPlayer();
+
+  log(wasRelocating ? '🏡 새 거점을 세웠다. 이전 농장은 버려졌다.' : '🏡 여기에 거점을 세웠다. 이곳이 당신의 집이다.', 'event');
+  toast('거점을 세웠다!', 'info');
+  queueSave();
+  renderAll();
+}
+
+function distance(x1, y1, x2, y2) {
+  return Math.hypot(x2 - x1, y2 - y1);
 }
 
 // ============================================
@@ -622,12 +795,14 @@ async function die(reason) {
   state.player.deathTimestamp = Date.now();
   state.player.stats.deathCount = (state.player.stats.deathCount || 0) + 1;
 
-  // 좀비 NPC로 등록 (인벤토리 + 위치 기록)
+  // 좀비 NPC로 등록 (인벤토리 + 월드 좌표 기록)
   try {
     await setDoc(doc(db, 'zombies', state.uid + '_' + Date.now()), {
       ownerUid: state.uid,
       ownerNickname: state.player.nickname,
-      location: state.player.location,
+      worldX: state.player.worldX,
+      worldY: state.player.worldY,
+      locationId: state.player.locationId || null,
       inventory: state.player.inventory,
       createdAt: serverTimestamp(),
       killed: false
@@ -649,15 +824,27 @@ async function die(reason) {
 }
 
 function showRespawnModal() {
+  // 사망 장소 이름
+  let deathPlace = '황야 어딘가';
+  if (state.player.locationId) {
+    if (state.player.locationId === 'home') deathPlace = '거점';
+    else {
+      const loc = getLocationById(state.player.locationId);
+      if (loc) deathPlace = loc.name;
+    }
+  }
+  const hasHome = state.player.homeX != null;
+  const btnLabel = hasHome ? '거점에서 부활하기' : '황야에서 다시 눈을 뜨다';
+
   openModal('사망', `
     <div style="text-align:center;">
       <div style="font-size:48px;margin-bottom:12px;">☠</div>
       <p style="margin-bottom:12px;">당신은 죽었다. 인벤토리를 모두 잃었다.</p>
       <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">
-        당신의 시체는 좀비가 되어 <strong>${LOCATIONS[state.player.location]?.name || '그곳'}</strong>에 남았다.<br>
+        당신의 시체는 좀비가 되어 <strong>${deathPlace}</strong>에 남았다.<br>
         다른 생존자가 찾아낸다면 남은 물건은 그들의 것이 될 것이다.
       </p>
-      <button class="btn btn-primary" id="btn-respawn">거점에서 부활하기</button>
+      <button class="btn btn-primary" id="btn-respawn">${btnLabel}</button>
     </div>
   `);
   document.getElementById('btn-respawn').addEventListener('click', respawn);
@@ -669,13 +856,26 @@ function respawn() {
   state.player.hunger = 60;
   state.player.thirst = 60;
   state.player.infection = 0;
-  state.player.location = 'home';
   state.player.statusEffects = [];
   state.player.inventory = [
     { id: 'item_water', count: 2 },
     { id: 'food_bread', count: 1 }
   ];
-  log('거점에서 부활했다. 새로운 날이 시작된다.', 'event');
+
+  // 거점이 있으면 거점에서, 없으면 월드 중앙 근처 랜덤한 지점에서
+  if (state.player.homeX != null) {
+    state.player.worldX = state.player.homeX;
+    state.player.worldY = state.player.homeY;
+    state.player.locationId = 'home';
+  } else {
+    state.player.worldX = 1200 + (Math.random() - 0.5) * 200;
+    state.player.worldY = 900 + (Math.random() - 0.5) * 200;
+    state.player.locationId = null;
+  }
+  setPlayerPos(state.player.worldX, state.player.worldY, false);
+  centerOnPlayer();
+
+  log('다시 눈을 떴다. 새로운 날이 시작된다.', 'event');
   closeModal();
   queueSave();
   renderAll();
@@ -701,7 +901,11 @@ async function saveImmediately() {
       infection: state.player.infection,
       alive: state.player.alive,
       deathTimestamp: state.player.deathTimestamp,
-      location: state.player.location,
+      worldX: state.player.worldX,
+      worldY: state.player.worldY,
+      locationId: state.player.locationId || null,
+      homeX: state.player.homeX ?? null,
+      homeY: state.player.homeY ?? null,
       skills: state.player.skills,
       inventory: state.player.inventory,
       inventoryMax: state.player.inventoryMax,
