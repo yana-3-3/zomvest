@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Last Harvest</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="game-body">
+  <!-- 상단 바 -->
+  <header class="top-bar">
+    <div class="top-left">
+      <h1 class="logo">Last Harvest</h1>
+      <span class="location-label" id="current-location">📍 황무지</span>
+    </div>
+    <div class="top-right">
+      <span class="player-name" id="player-name">생존자</span>
+      <button class="btn btn-ghost" id="btn-logout">로그아웃</button>
+    </div>
+  </header>
+
+  <!-- 메인 영역 -->
+  <main class="game-main">
+    <!-- 왼쪽: 스탯 패널 -->
+    <aside class="panel panel-left">
+      <section class="stat-block">
+        <h2 class="panel-title">상태</h2>
+        <div class="stat-row">
+          <span class="stat-label">❤️ 체력</span>
+          <div class="stat-bar"><div class="stat-fill hp-fill" id="hp-fill"></div></div>
+          <span class="stat-text" id="hp-text">100/100</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">🍖 포만감</span>
+          <div class="stat-bar"><div class="stat-fill hunger-fill" id="hunger-fill"></div></div>
+          <span class="stat-text" id="hunger-text">100/100</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">💧 수분</span>
+          <div class="stat-bar"><div class="stat-fill thirst-fill" id="thirst-fill"></div></div>
+          <span class="stat-text" id="thirst-text">100/100</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">🦠 감염도</span>
+          <div class="stat-bar"><div class="stat-fill infection-fill" id="infection-fill"></div></div>
+          <span class="stat-text" id="infection-text">0/100</span>
+        </div>
+      </section>
+
+      <section class="stat-block">
+        <h2 class="panel-title">스킬</h2>
+        <ul class="skill-list" id="skill-list">
+          <!-- JS에서 채움 -->
+        </ul>
+      </section>
+
+      <section class="stat-block">
+        <h2 class="panel-title">버프 / 디버프</h2>
+        <ul class="buff-list" id="buff-list">
+          <li class="buff-empty">효과 없음</li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- 중앙: 맵 -->
+    <section class="map-area">
+      <div class="map-wrapper" id="map-wrapper">
+        <!-- SVG 맵이 여기 삽입됨 -->
+      </div>
+      <div class="map-hud">
+        <div class="action-log" id="action-log">
+          <div class="log-entry log-system">세계에 오신 것을 환영합니다, 생존자여.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 오른쪽: 인벤토리 & 액션 -->
+    <aside class="panel panel-right">
+      <section class="stat-block">
+        <h2 class="panel-title">행동</h2>
+        <div class="action-grid">
+          <button class="btn btn-action" id="act-fish">🎣 낚시</button>
+          <button class="btn btn-action" id="act-farm">🌾 농사</button>
+          <button class="btn btn-action" id="act-cook">🍳 요리</button>
+          <button class="btn btn-action" id="act-forage">🔍 탐색</button>
+          <button class="btn btn-action" id="act-trade">💱 거래</button>
+          <button class="btn btn-action" id="act-rest">💤 휴식</button>
+        </div>
+      </section>
+
+      <section class="stat-block">
+        <h2 class="panel-title">
+          인벤토리
+          <span class="inv-count"><span id="inv-used">0</span>/<span id="inv-max">20</span></span>
+        </h2>
+        <div class="inventory-grid" id="inventory-grid">
+          <!-- JS에서 채움 -->
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- 모달 컨테이너 -->
+  <div class="modal-backdrop hidden" id="modal-backdrop">
+    <div class="modal" id="modal">
+      <header class="modal-header">
+        <h3 id="modal-title">제목</h3>
+        <button class="modal-close" id="modal-close">✕</button>
+      </header>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- 토스트 알림 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script type="module" src="js/firebase.js"></script>
+  <script type="module" src="js/data.js"></script>
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Last Harvest — 생존자 로그인</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="auth-body">
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <h1 class="game-title">Last Harvest</h1>
+        <p class="game-subtitle">마지막 수확 — 생존자 등록소</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">로그인</button>
+        <button class="auth-tab" data-tab="register">회원가입</button>
+      </div>
+
+      <form id="login-form" class="auth-form active">
+        <label>
+          <span>이메일</span>
+          <input type="email" id="login-email" required autocomplete="email" />
+        </label>
+        <label>
+          <span>비밀번호</span>
+          <input type="password" id="login-password" required autocomplete="current-password" />
+        </label>
+        <button type="submit" class="btn btn-primary">입장하기</button>
+      </form>
+
+      <form id="register-form" class="auth-form">
+        <label>
+          <span>닉네임</span>
+          <input type="text" id="register-nickname" required minlength="2" maxlength="12" />
+        </label>
+        <label>
+          <span>이메일</span>
+          <input type="email" id="register-email" required autocomplete="email" />
+        </label>
+        <label>
+          <span>비밀번호 (6자 이상)</span>
+          <input type="password" id="register-password" required minlength="6" autocomplete="new-password" />
+        </label>
+        <button type="submit" class="btn btn-primary">생존자 등록</button>
+      </form>
+
+      <div id="auth-message" class="auth-message"></div>
+
+      <div class="auth-footer">
+        <p>⚠ 캐릭터가 사망하면 인벤토리를 잃고 좀비가 됩니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK (modular) -->
+  <script type="module" src="js/firebase.js"></script>
+  <script type="module" src="js/auth.js"></script>
+</body>
+</html>
